@@ -13,6 +13,8 @@ lazy val zioDeps = List(
 
 lazy val catsDeps = List(
   "org.typelevel"   %% "cats-effect"          % "3.2.2",
+  "org.typelevel"   %% "cats-core"            % "2.3.1",
+  "org.typelevel"   %% "alleycats-core"       % "2.3.1",
   "org.typelevel"   %% "cats-laws"            % "2.6.1" % Test,
   "org.typelevel"   %% "discipline-scalatest" % "2.1.5" % Test,
   "com.avast.cloud" %% "datadog4s-statsd"     % "0.31.0"
@@ -34,7 +36,8 @@ lazy val root = (project in file("."))
       "com.github.alexarchambault" %% "scalacheck-shapeless_1.15" % "1.3.0"  % Test,
       "org.scalameta"              %% "munit"                     % "0.7.28" % Test,
       "com.lihaoyi"                %% "pprint"                    % "0.6.6",
-      "com.chuusai"                %% "shapeless"                 % "2.3.3"
+      "com.chuusai"                %% "shapeless"                 % "2.3.3",
+      "org.apache.commons"          % "commons-collections4"      % "4.4",
     )
       .++(catsDeps)
       .++(slickDeps),

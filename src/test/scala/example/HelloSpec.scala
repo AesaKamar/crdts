@@ -1,60 +1,71 @@
 package example
 
-import cats.kernel.{Eq, Monoid, Semigroup, Semilattice}
+import alleycats.Empty
+import cats.kernel.{CommutativeMonoid, Eq, Monoid, Semigroup, Semilattice}
 import cats.kernel.laws.discipline._
 import org.scalatest.funspec.{AnyFunSpec, AsyncFunSpec}
 import cats.laws
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.Configuration
 import org.typelevel.discipline.scalatest.FunSpecDiscipline
+import org.apache.commons.collections4.trie.PatriciaTrie
 
 import java.util.UUID
 
 /** Must be:
   *   - A commutative Semigroup with an idempotent combine
   */
-final case class MySemiLattice(seenIds: Set[UUID])
+final case class MySemiLattice[A: Monoid](stuff: PatriciaTrie[A])
 
 object MySemiLattice {
-  implicit val eqInstance: Eq[MySemiLattice] = new Eq[MySemiLattice] {
-    override def eqv(x: MySemiLattice, y: MySemiLattice): Boolean = x.seenIds == y.seenIds
+  implicit def eqInstance[A]: Eq[MySemiLattice[A]] = (x: MySemiLattice[A], y: MySemiLattice[A]) =>
+    x.stuff.equals(y.stuff)
+
+  implicit def semigroupInstance[A: Monoid]: Semigroup[MySemiLattice[A]] =
+    (x: MySemiLattice[A], y: MySemiLattice[A]) => {
+      val newStuff =  new PatriciaTrie(x.stuff)
+      newStuff.putAll(y.stuff)
+      MySemiLattice(newStuff)
+    }
+
+  implicit def semilatticeInstance[A: Monoid]: Semilattice[MySemiLattice[A]] =
+    (x: MySemiLattice[A], y: MySemiLattice[A]) => semigroupInstance[A].combine(x, y)
+
+  implicit def emptyInstance[A: Monoid]: Empty[MySemiLattice[A]] = new Empty[MySemiLattice[A]] {
+    override def empty: MySemiLattice[A] =
+      MySemiLattice(new PatriciaTrie[A]())
   }
 
-  implicit val semigroupInstance: Semigroup[MySemiLattice] = new Semigroup[MySemiLattice] {
-    override def combine(x: MySemiLattice, y: MySemiLattice): MySemiLattice =
-      MySemiLattice(x.seenIds.union(y.seenIds))
-  }
-
-  implicit val semilatticeInstance: Semilattice[MySemiLattice] = new Semilattice[MySemiLattice] {
-    override def combine(x: MySemiLattice, y: MySemiLattice): MySemiLattice =
-      semigroupInstance.combine(x, y)
-  }
-
-  implicit val monoidInstance: Monoid[MySemiLattice] = new Monoid[MySemiLattice] {
-    override def empty: MySemiLattice = MySemiLattice(Set.empty)
-
-    override def combine(x: MySemiLattice, y: MySemiLattice): MySemiLattice =
-      semigroupInstance.combine(x, y)
+  implicit def monoidInstance[A: Monoid]: Monoid[MySemiLattice[A]] = new Monoid[MySemiLattice[A]] {
+    override def empty: MySemiLattice[A]                                             = emptyInstance[A].empty
+    override def combine(x: MySemiLattice[A], y: MySemiLattice[A]): MySemiLattice[A] =
+      semigroupInstance[A].combine(x, y)
   }
 }
 
 class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration {
+  import scala.jdk.CollectionConverters._
 
-  val mySemiLaticeGenInstance: Gen[MySemiLattice] = for {
-    i          <- Gen.long.map(_.toInt)
-    seenBefore <- Gen.listOf(Gen.uuid).map(_.toSet)
+  def mySemiLaticeGenInstance[A: Monoid: Arbitrary: Gen]: Gen[MySemiLattice[A]] = for {
+    m <- Gen.mapOf[String, A](Gen.zip(Gen.alphaStr, implicitly[Gen[A]]))
   } yield {
-      MySemiLattice(seenBefore)
+    val tree = new PatriciaTrie[A](m.asJava)
+    MySemiLattice(tree)
   }
 
-  implicit val mySemiLaticeArbitraryInstance: Arbitrary[MySemiLattice] = Arbitrary(
-    mySemiLaticeGenInstance
-  )
+  implicit val genLong   = Gen.long
+  implicit val genString = Gen.alphaStr
+
+  implicit def mySemiLaticeArbitraryInstance[A: Gen: Arbitrary: Monoid]
+      : Arbitrary[MySemiLattice[A]]                          =
+    Arbitrary(mySemiLaticeGenInstance[A])
+  implicit val arbitraryBlah: Arbitrary[MySemiLattice[Long]] =
+    Arbitrary(mySemiLaticeGenInstance[Long])
 
   val catsLawsRuleSetSemigroup   =
-    SemigroupTests[MySemiLattice](MySemiLattice.semigroupInstance).semigroup
-  val catsLawsRuleSetMonoid      = MonoidTests[MySemiLattice].monoid
-  val catsLawsRuleSetSemiLattice = SemilatticeTests[MySemiLattice].semilattice
+    SemigroupTests[MySemiLattice[String]](MySemiLattice.semigroupInstance).semigroup
+  val catsLawsRuleSetMonoid      = MonoidTests[MySemiLattice[String]].monoid
+  val catsLawsRuleSetSemiLattice = SemilatticeTests[MySemiLattice[String]].semilattice
 
   // [info] - semilattice.intercalateRepeat2 *** FAILED ***
   // [info] GeneratorDrivenPropertyCheckFailedException was thrown during property evaluation.
@@ -70,19 +81,21 @@ class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration {
   // [info] Received: MySemiLattice(-2035427593,Set())
   //
 
-//  val a          = MySemiLattice(-21227448, Set.empty)
-//  val b          = MySemiLattice(-2014200145, Set.empty)
-//  val withMiddle = MySemiLattice.semilatticeInstance.intercalate(b)
+//  val a          = MySemiLattice[String](Set(UUID.randomUUID() -> "aaa"))
+//  val b          = MySemiLattice[String](Set(UUID.randomUUID() -> "b"))
+//  val withMiddle = MySemiLattice.semilatticeInstance[String].intercalate(b)
 //  val left       = withMiddle.combineN(a, 2)
-//  val rght      = withMiddle.combine(a, a)
-//  val real       = MySemiLattice(245339558, Set())
+//  val rght       = withMiddle.combine(a, a)
+//  val real       = MySemiLattice(Set.empty[(UUID, String)])
 //  pprint.log(left)
 //  pprint.log(rght)
 //  pprint.log(real)
+//
+//  pprint.log(Set(1, 2, 3).diff(Set(1)))
+//  pprint.log(Set(1).diff(Set(1, 2, 3)))
+//  checkAll(name = "semigroup", ruleSet = catsLawsRuleSetSemigroup)
 
-  checkAll(name = "semigroup", ruleSet = catsLawsRuleSetSemigroup)
-
-  checkAll(name = "monoid", ruleSet = catsLawsRuleSetMonoid)
+//  checkAll(name = "monoid", ruleSet = catsLawsRuleSetMonoid)
 
   checkAll(name = "semilattice", ruleSet = catsLawsRuleSetSemiLattice)
 
