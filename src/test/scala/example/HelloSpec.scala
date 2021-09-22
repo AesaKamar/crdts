@@ -52,11 +52,21 @@ object MySemiLattice {
 }
 
 final case class RGBA(r: Int, g: Int, b: Int, a: Int)
+object RGBA {
+  implicit val commutativeMonoidInstance: CommutativeMonoid[RGBA] = new CommutativeMonoid[RGBA] {
+    def empty: RGBA = RGBA(Monoid.empty, Monoid.empty, Monoid.empty, Monoid.empty)
 
+    val cb: (Int, Int) => Int = (x, y) => math.min(x + y, 255)
+
+    def combine(x: RGBA, y: RGBA): RGBA =
+      RGBA(cb(x.r, y.r), cb(x.g, y.g), cb(x.b, y.b), cb(x.a, y.a))
+
+  }
+}
 
 /** Test class
   *
-  * THe plan is to use a patricia tree to gossip diffs about a 2d anvas that peo
+  * THe plan is to use a patricia tree to gossip diffs about a 2d canvas that people can edit
   */
 class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration with Checkers {
   import scala.jdk.CollectionConverters._
@@ -78,9 +88,8 @@ class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration wit
   def mySemiLaticeOf[A: CommutativeMonoid](a: Gen[A]): Arbitrary[MySemiLattice[A]] =
     Arbitrary(mySemiLaticeGenInstance[A])
 
-
-  implicit val mySemiLatticeOfString : Arbitrary[MySemiLattice[Int]] = mySemiLaticeOf[Int](Gen.long.map(_.toInt))
-
+  implicit val mySemiLatticeOfString: Arbitrary[MySemiLattice[Int]] =
+    mySemiLaticeOf[Int](Gen.long.map(_.toInt))
 
 //  val catsLawsRuleSetSemigroup   =
 //    SemigroupTests[MySemiLattice[]](MySemiLattice.semigroupInstance).semigroup
