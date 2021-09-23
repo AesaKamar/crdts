@@ -260,7 +260,7 @@ object TicTacToe {
 
 
   implicitly[Winner[X]]
-  implicitly[Winner[O]]
+//  implicitly[Winner[O]]
   //---------------
   //- No overlaps
   //---------------

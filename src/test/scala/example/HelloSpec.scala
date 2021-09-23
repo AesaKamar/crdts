@@ -9,7 +9,6 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.Configuration
 import org.typelevel.discipline.scalatest.FunSpecDiscipline
 import org.apache.commons.collections4.trie.PatriciaTrie
-import org.scalacheck.Prop.exception.check
 import org.scalacheck.Prop.forAll
 import org.scalatestplus.scalacheck.Checkers
 
@@ -24,13 +23,23 @@ final case class MySemiLattice[A: Monoid](stuff: PatriciaTrie[A])
 
 object MySemiLattice {
   implicit def eqInstance[A]: Eq[MySemiLattice[A]] = (x: MySemiLattice[A], y: MySemiLattice[A]) => {
-    x.stuff.equals(y.stuff)
+    x.stuff.values().asScala.toSet.equals(y.stuff.values().asScala.toSet)
   }
 
   implicit def semigroupInstance[A: CommutativeMonoid]: Semigroup[MySemiLattice[A]] =
     (x: MySemiLattice[A], y: MySemiLattice[A]) => {
       val newStuff = new PatriciaTrie(x.stuff)
-      y.stuff.forEach((k, v) => newStuff.merge(k, v, CommutativeMonoid[A].combine(_, _)))
+      y.stuff.forEach((k, v) =>
+        newStuff.merge(
+          k,
+          v,
+          (oldVal, newVal) =>
+            if (oldVal != newVal)
+              CommutativeMonoid[A].combine(oldVal, newVal)
+            else
+              oldVal
+        )
+      )
       MySemiLattice(newStuff)
     }
 
@@ -53,8 +62,10 @@ object MySemiLattice {
 
 final case class RGBA(r: Int, g: Int, b: Int, a: Int)
 object RGBA {
+  implicit val eqInstance: Eq[RGBA] = (x: RGBA, y: RGBA) => x == y
+
   implicit val commutativeMonoidInstance: CommutativeMonoid[RGBA] = new CommutativeMonoid[RGBA] {
-    def empty: RGBA = RGBA(Monoid.empty, Monoid.empty, Monoid.empty, Monoid.empty)
+    def empty: RGBA = RGBA(0, 0, 0, 0)
 
     val cb: (Int, Int) => Int = (x, y) => math.min(x + y, 255)
 
@@ -86,95 +97,77 @@ class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration wit
   } yield new PatriciaTrie[String](m.asJava)
 
   def mySemiLaticeOf[A: CommutativeMonoid](a: Gen[A]): Arbitrary[MySemiLattice[A]] =
-    Arbitrary(mySemiLaticeGenInstance[A])
+    Arbitrary(mySemiLaticeGenInstance[A](a))
 
   implicit val mySemiLatticeOfString: Arbitrary[MySemiLattice[Int]] =
     mySemiLaticeOf[Int](Gen.long.map(_.toInt))
 
-//  val catsLawsRuleSetSemigroup   =
-//    SemigroupTests[MySemiLattice[]](MySemiLattice.semigroupInstance).semigroup
-//  val catsLawsRuleSetMonoid      = MonoidTests[MySemiLattice[String]].monoid
-//  val catsLawsRuleSetSemiLattice = SemilatticeTests[MySemiLattice[String]].semilattice
+  implicit val genMySemiLatticeRGBA: Gen[RGBA] =
+    Gen.zip(Gen.choose(0, 255), Gen.choose(0, 255), Gen.choose(0, 255), Gen.choose(0, 255)).map {
+      case (r, g, b, a) => RGBA.apply(r, g, b, a)
+    }
 
-  // [info] - semilattice.intercalateRepeat2 *** FAILED ***
-  // [info] GeneratorDrivenPropertyCheckFailedException was thrown during property evaluation.
-  // [info] (HelloSpec.scala:73)
-  // [info] Falsified after 0 successful property evaluations.
-  // [info] Location: (HelloSpec.scala:73)
-  // [info] Occurred when passed generated values (
-  // [info] arg0 =  MySemiLattice(-21227448,Set()),
-  // [info] arg1 = MySemiLattice(-2014200145,Set())
-  // [info] )
-  // [info] Label of failing property:
-  // [info] Expected: MySemiLattice(245339558,Set())
-  // [info] Received: MySemiLattice(-2035427593,Set())
-  //
+  implicit val mySemiLatticeRGBA: Arbitrary[MySemiLattice[RGBA]] =
+    mySemiLaticeOf[RGBA](genMySemiLatticeRGBA)
 
-//  val a          = MySemiLattice[String](Set(UUID.randomUUID() -> "aaa"))
-//  val b          = MySemiLattice[String](Set(UUID.randomUUID() -> "b"))
-//  val withMiddle = MySemiLattice.semilatticeInstance[String].intercalate(b)
-//  val left       = withMiddle.combineN(a, 2)
-//  val rght       = withMiddle.combine(a, a)
-//  val real       = MySemiLattice(Set.empty[(UUID, String)])
-//  pprint.log(left)
-//  pprint.log(rght)
-//  pprint.log(real)
-//
-//  pprint.log(Set(1, 2, 3).diff(Set(1)))
-//  pprint.log(Set(1).diff(Set(1, 2, 3)))
-//  checkAll(name = "semigroup", ruleSet = catsLawsRuleSetSemigroup)
+  implicit val arbitratyRGBA                  = Arbitrary(genMySemiLatticeRGBA)
+  val catsLawsSemiLatticeForMySemiLatticeRGBA = SemilatticeTests[MySemiLattice[RGBA]].semilattice
 
-//  checkAll(name = "monoid", ruleSet = catsLawsRuleSetMonoid)
+  val catsLawsCommutativeMonoidForRGBA = CommutativeMonoidTests[RGBA].commutativeMonoid
 
-//  checkAll(name = "semilattice", ruleSet = catsLawsRuleSetSemiLattice)
-//  it("A Patricia tree should pass the comutativity law") {
-//    check(forAll(genPatricia, genPatricia) { case (x, y) =>
-//      val xWithY = new PatriciaTrie[String](x)
-//      xWithY.putAll(y)
-//      val yWithX = new PatriciaTrie[String](y)
-//      yWithX.putAll(x)
-//
-//      val leftSide  = xWithY.values().asScala.toSet
-//      val rightSide = yWithX.values().asScala.toSet
-//      if (leftSide == rightSide)
-//        true
-//      else {
-//        pprint.pprintln(leftSide)
-//        pprint.pprintln(rightSide)
-//        false
-//      }
-//    })
-//  }
+  checkAll(name = "commutativeMonoidRGBA", ruleSet = catsLawsCommutativeMonoidForRGBA)
+  checkAll(
+    name = "commutativeMonoidSemiLatticeRGBA",
+    ruleSet = catsLawsSemiLatticeForMySemiLatticeRGBA
+  )
 
-  /** I learned that we must combine over the inner type on conflicts with a commutative semigroup
-    * operation
-    */
+  def showMapCommutativity[M <: util.AbstractMap[String, String]](
+      newMap: util.Map[String, String] => M,
+      semigroupOp: (String, String) => String
+  ) = {
+    forAll(
+      Gen.mapOf[String, String](Gen.zip(Gen.alphaStr, Gen.alphaStr)).map(_.asJava),
+      Gen.mapOf[String, String](Gen.zip(Gen.alphaStr, Gen.alphaStr)).map(_.asJava)
+    ) { case (x, y) =>
+      val xWithY = newMap(x)
+      y.forEach { case (a, b) =>
+        xWithY.merge(a, b, (l, r) => semigroupOp(l, r))
+      }
+      val yWithX = newMap(y)
+      x.forEach { case (a, b) =>
+        yWithX.merge(a, b, (l, r) => semigroupOp(l, r))
+      }
+
+      val leftSide  = xWithY.values().asScala.toSet
+      val rightSide = yWithX.values().asScala.toSet
+      if (leftSide == rightSide)
+        true
+      else
+        false
+    }
+  }
+
   it(
     "A HashMap should pass the commutativity law under map.merge and CommutativeMonoid[A].combine"
   ) {
 
     check(
-      forAll(
-        Gen.mapOf[String, String](Gen.zip(Gen.alphaStr, Gen.alphaStr)).map(_.asJava),
-        Gen.mapOf[String, String](Gen.zip(Gen.alphaStr, Gen.alphaStr)).map(_.asJava)
-      ) { case (x, y) =>
-        val xWithY = new util.HashMap[String, String](x)
-        y.forEach { case (a, b) =>
-          xWithY.merge(a, b, (l, r) => Order[String].min(l, r).concat(Order[String].max(l, r)))
-        }
-        val yWithX = new util.HashMap[String, String](y)
-        x.forEach { case (a, b) =>
-          yWithX.merge(a, b, (l, r) => Order[String].min(l, r).concat(Order[String].max(l, r)))
-        }
+      showMapCommutativity(
+        newMap = new util.HashMap[String, String](_),
+        semigroupOp = (l, r) => Order[String].min(l, r).concat(Order[String].max(l, r))
+      )
+    )
+  }
 
-        val leftSide  = xWithY.values().asScala.toSet
-        val rightSide = yWithX.values().asScala.toSet
-        if (leftSide == rightSide)
-          true
-        else {
-          false
-        }
-      }
+  it(
+    "A PatriciaTrie should pass the commutativity law under map.merge and CommutativeMonoid[A].combine"
+  ) {
+
+    check(
+      showMapCommutativity(
+        newMap = new PatriciaTrie[String](_),
+        semigroupOp = (l, r) => Order[String].min(l, r).concat(Order[String].max(l, r))
+      )
     )
   }
 
