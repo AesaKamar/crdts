@@ -3,8 +3,8 @@ package example
 import alleycats.Empty
 import cats.kernel.{CommutativeMonoid, Eq, Monoid, Semigroup, Semilattice}
 import cats.kernel.laws.discipline._
-import org.scalatest.funspec.{AnyFunSpec, AsyncFunSpec}
-import cats.{Order, laws}
+import org.scalatest.funspec.AnyFunSpec
+import cats.Order
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.Configuration
 import org.typelevel.discipline.scalatest.FunSpecDiscipline
@@ -13,8 +13,8 @@ import org.scalacheck.Prop.forAll
 import org.scalatestplus.scalacheck.Checkers
 
 import java.util
-import java.util.UUID
-import scala.jdk.CollectionConverters._
+//import java.util.UUID
+//import scala.jdk.CollectionConverters._
 
 /** Must be:
   *   - A commutative Semigroup with an idempotent combine
@@ -22,14 +22,13 @@ import scala.jdk.CollectionConverters._
 final case class MySemiLattice[A: Monoid](stuff: PatriciaTrie[A])
 
 object MySemiLattice {
-  implicit def eqInstance[A]: Eq[MySemiLattice[A]] = (x: MySemiLattice[A], y: MySemiLattice[A]) => {
-    x.stuff.values().asScala.toSet.equals(y.stuff.values().asScala.toSet)
-  }
+  implicit def eqInstance[A]: Eq[MySemiLattice[A]] = (x: MySemiLattice[A], y: MySemiLattice[A]) =>
+    x.equals(y)
 
   implicit def semigroupInstance[A: CommutativeMonoid]: Semigroup[MySemiLattice[A]] =
     (x: MySemiLattice[A], y: MySemiLattice[A]) => {
       val newStuff = new PatriciaTrie(x.stuff)
-      y.stuff.forEach((k, v) =>
+      y.stuff.forEach { (k, v) =>
         newStuff.merge(
           k,
           v,
@@ -39,7 +38,8 @@ object MySemiLattice {
             else
               oldVal
         )
-      )
+        ()
+      }
       MySemiLattice(newStuff)
     }
 
@@ -67,6 +67,7 @@ object RGBA {
   implicit val commutativeMonoidInstance: CommutativeMonoid[RGBA] = new CommutativeMonoid[RGBA] {
     def empty: RGBA = RGBA(0, 0, 0, 0)
 
+    // Use basic color addition
     val cb: (Int, Int) => Int = (x, y) => math.min(x + y, 255)
 
     def combine(x: RGBA, y: RGBA): RGBA =
@@ -83,7 +84,7 @@ class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration wit
   import scala.jdk.CollectionConverters._
 
   def mySemiLaticeGenInstance[A: CommutativeMonoid](a: Gen[A]): Gen[MySemiLattice[A]] = for {
-    m <- Gen.mapOf[String, A](Gen.zip(Gen.alphaStr, a))
+    m <- Gen.mapOf[String, A](Gen.zip(Gen.uuid.map(_.toString), a))
   } yield {
     val tree = new PatriciaTrie[A](m.asJava)
     MySemiLattice(tree)
@@ -102,15 +103,15 @@ class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration wit
   implicit val mySemiLatticeOfString: Arbitrary[MySemiLattice[Int]] =
     mySemiLaticeOf[Int](Gen.long.map(_.toInt))
 
-  implicit val genMySemiLatticeRGBA: Gen[RGBA] =
+  implicit val genRGBA: Gen[RGBA] =
     Gen.zip(Gen.choose(0, 255), Gen.choose(0, 255), Gen.choose(0, 255), Gen.choose(0, 255)).map {
       case (r, g, b, a) => RGBA.apply(r, g, b, a)
     }
 
   implicit val mySemiLatticeRGBA: Arbitrary[MySemiLattice[RGBA]] =
-    mySemiLaticeOf[RGBA](genMySemiLatticeRGBA)
+    mySemiLaticeOf[RGBA](genRGBA)
 
-  implicit val arbitratyRGBA                  = Arbitrary(genMySemiLatticeRGBA)
+  implicit val arbitratyRGBA                  = Arbitrary(genRGBA)
   val catsLawsSemiLatticeForMySemiLatticeRGBA = SemilatticeTests[MySemiLattice[RGBA]].semilattice
 
   val catsLawsCommutativeMonoidForRGBA = CommutativeMonoidTests[RGBA].commutativeMonoid
@@ -132,10 +133,12 @@ class HelloSpec extends AnyFunSpec with FunSpecDiscipline with Configuration wit
       val xWithY = newMap(x)
       y.forEach { case (a, b) =>
         xWithY.merge(a, b, (l, r) => semigroupOp(l, r))
+        ()
       }
       val yWithX = newMap(y)
       x.forEach { case (a, b) =>
         yWithX.merge(a, b, (l, r) => semigroupOp(l, r))
+        ()
       }
 
       val leftSide  = xWithY.values().asScala.toSet
