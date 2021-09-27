@@ -12,12 +12,15 @@ lazy val zioDeps = List(
 )
 
 lazy val catsDeps = List(
-  "org.typelevel"   %% "cats-effect"          % "3.2.2",
-  "org.typelevel"   %% "cats-core"            % "2.3.1",
-  "org.typelevel"   %% "alleycats-core"       % "2.3.1",
-  "org.typelevel"   %% "cats-laws"            % "2.6.1" % Test,
-  "org.typelevel"   %% "discipline-scalatest" % "2.1.5" % Test,
-  "com.avast.cloud" %% "datadog4s-statsd"     % "0.31.0"
+  "org.typelevel"     %% "cats-effect"          % "3.2.2",
+  "org.typelevel"     %% "cats-core"            % "2.3.1",
+  "org.typelevel"     %% "alleycats-core"       % "2.3.1",
+  "org.typelevel"     %% "cats-laws"            % "2.6.1" % Test,
+  "org.typelevel"     %% "discipline-scalatest" % "2.1.5" % Test,
+  "com.avast.cloud"   %% "datadog4s-statsd"     % "0.31.0",
+  "co.fs2"            %% "fs2-core"             % "3.1.3",
+  "co.fs2"            %% "fs2-io"               % "3.1.3",
+  "de.ruedigermoeller" % "fst"                  % "2.56"
 )
 
 lazy val slickDeps = List(
