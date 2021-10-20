@@ -1,7 +1,7 @@
 package example
 
 import alleycats.Empty
-import cats.kernel.{CommutativeMonoid, Eq, Monoid, Semigroup, Semilattice}
+import cats.kernel._
 import cats.kernel.laws.discipline._
 import org.scalatest.funspec.AnyFunSpec
 import cats.Order
@@ -11,42 +11,48 @@ import org.typelevel.discipline.scalatest.FunSpecDiscipline
 import org.apache.commons.collections4.trie.PatriciaTrie
 import org.scalacheck.Prop.forAll
 import org.scalatestplus.scalacheck.Checkers
-import simulacrum.typeclass
 
 import java.util
-//import java.util.UUID
-//import scala.jdk.CollectionConverters._
 
 /** Must be:
-  *   - A commutative Semigroup with an idempotent combine
+  *   - A [[CommutativeSemigroup]] with an idempotent combine AKA [[Band]]
+ *    - Indexable with a unique identifier
   */
 final case class MyCRDT[A: Monoid](stuff: PatriciaTrie[A])
 
+/**
+ * Provide typeclass instances
+ */
 object MyCRDT {
-  implicit def eqInstance[A]: Eq[MyCRDT[A]] = (x: MyCRDT[A], y: MyCRDT[A]) =>
-    x.equals(y)
+  implicit def eqInstance[A]: Eq[MyCRDT[A]] = new Eq[MyCRDT[A]] {
+    override def eqv(x: MyCRDT[A], y: MyCRDT[A]): Boolean = x.equals(y)
+  }
 
   implicit def semigroupInstance[A: CommutativeMonoid]: Semigroup[MyCRDT[A]] =
-    (x: MyCRDT[A], y: MyCRDT[A]) => {
-      val newStuff = new PatriciaTrie(x.stuff)
-      y.stuff.forEach { (k, v) =>
-        newStuff.merge(
-          k,
-          v,
-          (oldVal, newVal) =>
-            if (oldVal != newVal)
-              CommutativeMonoid[A].combine(oldVal, newVal)
-            else
-              oldVal
-        )
-        ()
+    new Semigroup[MyCRDT[A]] {
+      override def combine(x: MyCRDT[A], y: MyCRDT[A]): MyCRDT[A] = {
+        val newStuff = new PatriciaTrie(x.stuff)
+        y.stuff.forEach { (k, v) =>
+          newStuff.merge(
+            k,
+            v,
+            (oldVal, newVal) =>
+              if (oldVal != newVal)
+                CommutativeMonoid[A].combine(oldVal, newVal)
+              else
+                oldVal
+          )
+          ()
+        }
+        MyCRDT(newStuff)
       }
-      MyCRDT(newStuff)
     }
 
   implicit def semilatticeInstance[A: CommutativeMonoid]
-      : Semilattice[MyCRDT[A]] =
-    (x: MyCRDT[A], y: MyCRDT[A]) => semigroupInstance[A].combine(x, y)
+      : Semilattice[MyCRDT[A]] = new Semilattice[MyCRDT[A]] {
+    override def combine(x: MyCRDT[A], y: MyCRDT[A]): MyCRDT[A] =
+      semigroupInstance[A].combine(x, y)
+  }
 
   implicit def emptyInstance[A: CommutativeMonoid]: Empty[MyCRDT[A]] =
     new Empty[MyCRDT[A]] {
@@ -62,6 +68,9 @@ object MyCRDT {
     }
 }
 
+/**
+ * A sample data structure which is a [[CommutativeMonoid]]
+ */
 final case class RGBA(r: Int, g: Int, b: Int, a: Int)
 object RGBA {
   implicit val eqInstance: Eq[RGBA] = (x: RGBA, y: RGBA) => x == y
@@ -81,7 +90,7 @@ object RGBA {
 
 /** Test class
   *
-  * THe plan is to use a patricia tree to gossip diffs about a 2d canvas that
+  * The plan is to use a patricia tree to gossip diffs about a 2d canvas that
   * people can edit
   */
 class HelloSpec
