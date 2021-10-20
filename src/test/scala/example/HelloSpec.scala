@@ -16,13 +16,12 @@ import java.util
 
 /** Must be:
   *   - A [[CommutativeSemigroup]] with an idempotent combine AKA [[Band]]
- *    - Indexable with a unique identifier
+  *     - Indexable with a unique identifier
   */
 final case class MyCRDT[A: Monoid](stuff: PatriciaTrie[A])
 
-/**
- * Provide typeclass instances
- */
+/** Provide typeclass instances
+  */
 object MyCRDT {
   implicit def eqInstance[A]: Eq[MyCRDT[A]] = new Eq[MyCRDT[A]] {
     override def eqv(x: MyCRDT[A], y: MyCRDT[A]): Boolean = x.equals(y)
@@ -68,9 +67,8 @@ object MyCRDT {
     }
 }
 
-/**
- * A sample data structure which is a [[CommutativeMonoid]]
- */
+/** A sample data structure which is a [[CommutativeMonoid]]
+  */
 final case class RGBA(r: Int, g: Int, b: Int, a: Int)
 object RGBA {
   implicit val eqInstance: Eq[RGBA] = (x: RGBA, y: RGBA) => x == y
@@ -98,9 +96,12 @@ class HelloSpec
     with FunSpecDiscipline
     with Configuration
     with Checkers {
-  import scala.jdk.CollectionConverters._
   import HelloSpec._
 
+  checkAll(
+    name = "semigroup",
+    ruleSet = catsLawsSemigroupForMySemiLatticeRGBA
+  )
   checkAll(
     name = "commutativeMonoidRGBA",
     ruleSet = catsLawsCommutativeMonoidForRGBA
@@ -173,6 +174,10 @@ object HelloSpec {
     }
   }
 
+  /*
+   * Implement ScalaCheck helpers for property based tests
+   * -----------------------------------------------------
+   */
   def mySemiLaticeGenInstance[A: CommutativeMonoid](a: Gen[A]): Gen[MyCRDT[A]] =
     for {
       m <- Gen.mapOf[String, A](Gen.zip(Gen.uuid.map(_.toString), a))
@@ -209,7 +214,16 @@ object HelloSpec {
   implicit val mySemiLatticeRGBA: Arbitrary[MyCRDT[RGBA]] =
     mySemiLaticeOf[RGBA](genRGBA)
 
-  implicit val arbitratyRGBA: Arbitrary[RGBA]  = Arbitrary(genRGBA)
+  implicit val arbitratyRGBA: Arbitrary[RGBA] = Arbitrary(genRGBA)
+
+  /*
+   * Implement Cats Laws checking from [[cats.discipline]]
+   * -----------------------------------------------------
+   */
+  val catsLawsSemigroupForMySemiLatticeRGBA
+      : SemigroupTests[MyCRDT[RGBA]]#RuleSet =
+    SemilatticeTests[MyCRDT[RGBA]].semigroup
+
   val catsLawsSemiLatticeForMySemiLatticeRGBA
       : SemilatticeTests[MyCRDT[RGBA]]#RuleSet =
     SemilatticeTests[MyCRDT[RGBA]].semilattice
